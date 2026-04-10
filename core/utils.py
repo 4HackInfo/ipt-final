@@ -26,14 +26,18 @@ def get_week_start(date=None):
         date = timezone.now().date()
     return date - timedelta(days=date.weekday() + 1 if date.weekday() != 6 else 0)
 
-def calculate_attendance_summary(week_start=None):
+def calculate_attendance_summary(week_start=None, company_filter=None):
     """Calculate attendance summary for a given week"""
     if week_start is None:
         week_start = get_week_start()
     
     week_end = week_start + timedelta(days=6)
     
+    # Get students with optional company filter
     students = User.objects.filter(role='student')
+    if company_filter:
+        students = students.filter(company=company_filter)
+    
     total_students = students.count()
     
     attendance_stats = {
@@ -52,6 +56,7 @@ def calculate_attendance_summary(week_start=None):
         if record:
             attendance_stats[record.status] += 1
         else:
+            # No record means absent
             attendance_stats['absent'] += 1
     
     return {

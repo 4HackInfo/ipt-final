@@ -3,6 +3,7 @@ from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
+
 from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.core.paginator import Paginator
@@ -13,7 +14,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from io import BytesIO
 import csv
-
+from reportlab.lib.pagesizes import letter, landscape
 from .models import User, SlipCode, AttendanceRecord, SystemSettings, GeneratedBatch
 from .forms import (
     StudentRegistrationForm, LoginForm, TimeInForm, 
@@ -192,6 +193,91 @@ def instructor_dashboard_view(request):
     }
     
     return render(request, 'dashboard/instructor_dashboard.html', context)
+
+@login_required
+@instructor_required
+def attendance_report_view(request):
+    # Get filter parameters
+    week_start_str = request.GET.get('week_start', '')
+    company_filter = request.GET.get('company', '')
+    status_filter = request.GET.get('status', '')
+    
+    if week_start_str:
+        from datetime import datetime
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+    else:
+        week_start = get_week_start()
+    
+    # Get ALL students (filter by company if selected)
+    all_students = User.objects.filter(role='student')
+    
+    if company_filter:
+        all_students = all_students.filter(company=company_filter)
+    
+    # Get attendance records for the selected week
+    attendance_records = {}
+    for record in AttendanceRecord.objects.filter(week_start=week_start).select_related('user'):
+        attendance_records[record.user.id] = record
+    
+    # Create a list combining all students with their attendance records
+    combined_data = []
+    for student in all_students:
+        record = attendance_records.get(student.id)
+        
+        if record:
+            # Student has attendance record
+            combined_data.append({
+                'student': student,
+                'record': record,
+                'status': record.status,
+                'time_in': record.time_in,
+                'time_out': record.time_out,
+                'date': record.date,
+            })
+        else:
+            # Student has NO attendance record - mark as ABSENT
+            combined_data.append({
+                'student': student,
+                'record': None,
+                'status': 'absent',
+                'time_in': None,
+                'time_out': None,
+                'date': week_start,
+            })
+    
+    # Apply status filter if selected
+    if status_filter:
+        combined_data = [item for item in combined_data if item['status'] == status_filter]
+    
+    # Pagination
+    paginator = Paginator(combined_data, 50)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    
+    # Get summary (this already includes absent students from utils function)
+    summary = calculate_attendance_summary(week_start, company_filter)
+    
+    # Get available weeks (last 8 weeks)
+    from datetime import timedelta
+    weeks = []
+    for i in range(8):
+        week_date = get_week_start(timezone.now().date() - timedelta(weeks=i))
+        weeks.append({
+            'date': week_date,
+            'display': week_date.strftime('%B %d, %Y')
+        })
+    
+    context = {
+        'page_obj': page_obj,
+        'summary': summary,
+        'weeks': weeks,
+        'selected_week': week_start,
+        'company_filter': company_filter,
+        'status_filter': status_filter,
+    }
+    
+    return render(request, 'reports/attendance_report.html', context)
+
 
 @login_required
 @student_required
@@ -508,191 +594,122 @@ def download_slips_pdf(request):
     
     # Create PDF
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                           rightMargin=36, leftMargin=36, 
+                           topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet()
     story = []
     
-    # Title
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#003366'),
-        alignment=1,
-        spaceAfter=30
-    )
-    title = Paragraph("NSTP Attendance Slip Codes", title_style)
-    story.append(title)
+    # Extract just the code strings from the generated_codes list
+    timein_codes = [c['code'] for c in generated_codes if c.get('type') == 'timein']
+    timeout_codes = [c['code'] for c in generated_codes if c.get('type') == 'timeout']
     
-    # Subtitle
-    subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Normal'],
-        fontSize=12,
-        alignment=1,
-        spaceAfter=30
-    )
-    subtitle = Paragraph(f"Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style)
-    story.append(subtitle)
+    # Create a 10x10 grid (10 rows x 10 columns = 100 codes)
+    def create_code_grid(codes, title, title_color, code_color):
+        story_parts = []
+        
+        # Title with color
+        title_style = ParagraphStyle(
+            'Title',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=title_color,
+            alignment=1,
+            spaceAfter=20
+        )
+        story_parts.append(Paragraph(title, title_style))
+        
+        # Subtitle
+        subtitle = Paragraph(f"Total: {len(codes)} codes | One-time use only | Valid until end of week", styles['Normal'])
+        story_parts.append(subtitle)
+        story_parts.append(Spacer(1, 10))
+        
+        # Create table data: 10 columns x (number of rows needed)
+        num_rows = (len(codes) + 9) // 10  # Ceiling division
+        
+        # Prepare table data
+        table_data = []
+        
+        # Create the grid
+        for row in range(num_rows):
+            data_row = []
+            for col in range(10):
+                idx = row * 10 + col
+                if idx < len(codes):
+                    # Create a cell with colored code text
+                    code_num = idx + 1
+                    
+                    # Get color as hex string for the background
+                    bg_color = '#e8f5e9' if title_color == colors.green else '#ffebee'
+                    
+                    code_text = f"""
+                    <table border="1" cellpadding="5" cellspacing="0" width="100%">
+                        <tr>
+                            <td align="center" bgcolor="#f0f0f0" width="30%">
+                                <font size="8">#{code_num}</font>
+                            </td>
+                            <td align="center" bgcolor="{bg_color}">
+                                <font size="11" face="Courier" color="{code_color}"><b>{codes[idx]}</b></font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="center" colspan="2" height="30">
+                                <font size="7">__________________</font>
+                            </td>
+                        </tr>
+                    </table>
+                    """
+                    data_row.append(Paragraph(code_text, styles['Normal']))
+                else:
+                    # Empty cell
+                    data_row.append(Paragraph("", styles['Normal']))
+            table_data.append(data_row)
+        
+        # Create table with 10 columns
+        col_widths = [0.9*inch] * 10
+        table = Table(table_data, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ]))
+        
+        story_parts.append(table)
+        story_parts.append(Spacer(1, 20))
+        
+        # Footer
+        footer_style = ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            alignment=1,
+            textColor=colors.grey
+        )
+        footer = Paragraph("NSTP Attendance System - Slip Code (One-time use only)", footer_style)
+        story_parts.append(footer)
+        
+        return story_parts
     
-    # Create table data
-    table_data = [['Student Name', 'Code Type', 'Slip Code', 'Status']]
-    for code in generated_codes:
-        table_data.append([
-            code['student_name'],
-            code['type'].upper(),
-            code['code'],
-            'UNUSED'
-        ])
+    # Generate Time In codes grid (Green text)
+    if timein_codes:
+        story.extend(create_code_grid(timein_codes, "TIME IN SLIP CODES", colors.green, colors.green))
     
-    # Create table
-    table = Table(table_data, colWidths=[2*inch, 1.2*inch, 1.5*inch, 1*inch])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#003366')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 12),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 10),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ALIGN', (2, 1), (2, -1), 'LEFT'),
-    ]))
+    # Add page break if both types exist
+    if timein_codes and timeout_codes:
+        story.append(PageBreak())
     
-    story.append(table)
-    story.append(Spacer(1, 20))
-    
-    # Footer
-    footer_style = ParagraphStyle(
-        'Footer',
-        parent=styles['Normal'],
-        fontSize=9,
-        textColor=colors.grey,
-        alignment=1
-    )
-    footer = Paragraph("These codes are one-time use only and expire at the end of the week.", footer_style)
-    story.append(footer)
+    # Generate Time Out codes grid (Red text)
+    if timeout_codes:
+        story.extend(create_code_grid(timeout_codes, "TIME OUT SLIP CODES", colors.red, colors.red))
     
     doc.build(story)
     buffer.seek(0)
     
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="nstp_slip_codes.pdf"'
-    return response
-
-@login_required
-@instructor_required
-def attendance_report_view(request):
-    # Get filter parameters
-    week_start_str = request.GET.get('week_start', '')
-    status_filter = request.GET.get('status', '')
-    
-    if week_start_str:
-        from datetime import datetime
-        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
-    else:
-        week_start = get_week_start()
-    
-    # Get ALL students
-    all_students = User.objects.filter(role='student')
-    
-    # Get attendance records for the selected week
-    attendance_records = {}
-    for record in AttendanceRecord.objects.filter(week_start=week_start).select_related('user'):
-        attendance_records[record.user.id] = record
-    
-    # Create a list combining all students with their attendance records
-    combined_data = []
-    for student in all_students:
-        record = attendance_records.get(student.id)
-        
-        if record:
-            # Student has attendance record
-            combined_data.append({
-                'student': student,
-                'record': record,
-                'status': record.status,
-                'time_in': record.time_in,
-                'time_out': record.time_out,
-                'date': record.date,
-            })
-        else:
-            # Student has NO attendance record - mark as ABSENT
-            combined_data.append({
-                'student': student,
-                'record': None,
-                'status': 'absent',
-                'time_in': None,
-                'time_out': None,
-                'date': week_start,  # Use week start date for absent records
-            })
-    
-    # Apply status filter if selected
-    if status_filter:
-        combined_data = [item for item in combined_data if item['status'] == status_filter]
-    
-    # Pagination
-    paginator = Paginator(combined_data, 50)
-    page_number = request.GET.get('page', 1)
-    page_obj = paginator.get_page(page_number)
-    
-    # Get summary (this already includes absent students from utils function)
-    summary = calculate_attendance_summary(week_start)
-    
-    # Get available weeks (last 8 weeks)
-    from datetime import timedelta
-    weeks = []
-    for i in range(8):
-        week_date = get_week_start(timezone.now().date() - timedelta(weeks=i))
-        weeks.append({
-            'date': week_date,
-            'display': week_date.strftime('%B %d, %Y')
-        })
-    
-    context = {
-        'page_obj': page_obj,
-        'summary': summary,
-        'weeks': weeks,
-        'selected_week': week_start,
-        'status_filter': status_filter,
-    }
-    
-    return render(request, 'reports/attendance_report.html', context)
-
-@login_required
-@instructor_required
-def export_attendance_csv(request):
-    week_start_str = request.GET.get('week_start', '')
-    
-    if week_start_str:
-        from datetime import datetime
-        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
-    else:
-        week_start = get_week_start()
-    
-    records = AttendanceRecord.objects.filter(week_start=week_start).select_related('user')
-    
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="attendance_{week_start}.csv"'
-    
-    writer = csv.writer(response)
-    writer.writerow(['Student ID', 'Name', 'Course', 'Year Level', 'Date', 'Time In', 'Time Out', 'Status'])
-    
-    for record in records:
-        writer.writerow([
-            record.user.student_id,
-            record.user.get_full_name(),
-            record.user.course,
-            record.user.year_level,
-            record.date,
-            record.time_in.strftime('%I:%M %p') if record.time_in else '',
-            record.time_out.strftime('%I:%M %p') if record.time_out else '',
-            record.status.upper()
-        ])
-    
     return response
 
 @login_required
@@ -1057,4 +1074,96 @@ def code_report_pdf(request):
     
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = 'attachment; filename="slip_codes_report.pdf"'
+    return response
+
+@login_required
+@instructor_required
+def export_attendance_csv(request):
+    # Get filter parameters
+    week_start_str = request.GET.get('week_start', '')
+    company_filter = request.GET.get('company', '')
+    status_filter = request.GET.get('status', '')
+    
+    if week_start_str:
+        from datetime import datetime
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+    else:
+        week_start = get_week_start()
+    
+    # Get ALL students with optional company filter
+    all_students = User.objects.filter(role='student')
+    if company_filter:
+        all_students = all_students.filter(company=company_filter)
+    
+    # Get attendance records for the selected week
+    attendance_records = {}
+    for record in AttendanceRecord.objects.filter(week_start=week_start).select_related('user'):
+        attendance_records[record.user.id] = record
+    
+    # Create combined data with status
+    combined_data = []
+    for student in all_students:
+        record = attendance_records.get(student.id)
+        
+        if record:
+            status = record.status
+            # Check if time_in and time_out exist (regardless of time)
+            time_in_status = 'PASSED' if record.time_in else 'NOT PASSED'
+            time_out_status = 'PASSED' if record.time_out else 'NOT PASSED'
+            date = record.date
+        else:
+            status = 'absent'
+            time_in_status = 'NOT PASSED'
+            time_out_status = 'NOT PASSED'
+            date = week_start
+        
+        combined_data.append({
+            'student': student,
+            'status': status,
+            'time_in_status': time_in_status,
+            'time_out_status': time_out_status,
+            'date': date,
+        })
+    
+    # Apply status filter if selected
+    if status_filter:
+        combined_data = [item for item in combined_data if item['status'] == status_filter]
+    
+    # Create filename
+    filename_parts = ['attendance_report', week_start.strftime('%Y-%m-%d')]
+    if company_filter:
+        filename_parts.append(company_filter.lower())
+    if status_filter:
+        filename_parts.append(status_filter)
+    
+    filename = '_'.join(filename_parts)
+    
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
+    
+    writer = csv.writer(response)
+    
+    # Header row
+    writer.writerow(['Student ID', 'Name', 'Course', 'Company', 'Year Level', 'Date', 'Time In Status', 'Time Out Status', 'Overall Status'])
+    
+    # Data rows
+    for item in combined_data:
+        # Format year level
+        year_level = f"{item['student'].year_level} Year"
+        
+        # Format date
+        date_str = item['date'].strftime('%d/%m/%Y')
+        
+        writer.writerow([
+            item['student'].student_id,
+            item['student'].get_full_name(),
+            item['student'].get_course_display(),
+            item['student'].get_company_display(),
+            year_level,
+            date_str,
+            item['time_in_status'],
+            item['time_out_status'],
+            item['status'].upper()
+        ])
+    
     return response

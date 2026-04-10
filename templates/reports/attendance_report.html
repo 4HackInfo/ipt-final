@@ -11,7 +11,7 @@
         </div>
         <div class="card-body">
             <form method="get" class="row">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label>Week Starting</label>
                     <select name="week_start" class="form-control">
                         {% for week in weeks %}
@@ -21,7 +21,21 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <label>Company</label>
+                    <select name="company" class="form-control">
+                        <option value="">All Companies</option>
+                        <option value="ALPHA" {% if company_filter == 'ALPHA' %}selected{% endif %}>Alpha Company</option>
+                        <option value="BRAVO" {% if company_filter == 'BRAVO' %}selected{% endif %}>Bravo Company</option>
+                        <option value="CHARLIE" {% if company_filter == 'CHARLIE' %}selected{% endif %}>Charlie Company</option>
+                        <option value="DELTA" {% if company_filter == 'DELTA' %}selected{% endif %}>Delta Company</option>
+                        <option value="ECHO" {% if company_filter == 'ECHO' %}selected{% endif %}>Echo Company</option>
+                        <option value="FOXTROT" {% if company_filter == 'FOXTROT' %}selected{% endif %}>Foxtrot Company</option>
+                        <option value="GOLF" {% if company_filter == 'GOLF' %}selected{% endif %}>Golf Company</option>
+                        <option value="HOTEL" {% if company_filter == 'HOTEL' %}selected{% endif %}>Hotel Company</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
                     <label>Status</label>
                     <select name="status" class="form-control">
                         <option value="">All Status</option>
@@ -31,7 +45,7 @@
                         <option value="cutting" {% if status_filter == 'cutting' %}selected{% endif %}>Cutting</option>
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label>&nbsp;</label>
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="fas fa-search"></i> Apply Filter
@@ -90,12 +104,12 @@
         <span class="ms-3"><i class="fas fa-cut text-info"></i> Cutting: {{ summary.stats.cutting }}</span>
     </div>
     
-    <!-- Export Button -->
-    <div class="mb-3">
-        <a href="{% url 'export_attendance_csv' %}?week_start={{ selected_week|date:'Y-m-d' }}" class="btn btn-success">
-            <i class="fas fa-file-csv"></i> Export to CSV
-        </a>
-    </div>
+   <!-- Export Button -->
+<div class="mb-3">
+    <a href="{% url 'export_attendance_csv' %}?week_start={{ selected_week|date:'Y-m-d' }}&company={{ company_filter }}&status={{ status_filter }}" class="btn btn-success">
+        <i class="fas fa-file-csv"></i> Export to CSV
+    </a>
+</div>
     
     <!-- Attendance Table -->
     <div class="card shadow">
@@ -125,10 +139,16 @@
                                 <td>{{ forloop.counter0|add:page_obj.start_index }}</td>
                                 <td>{{ item.student.student_id }}</td>
                                 <td>{{ item.student.get_full_name }}</td>
-                                <td>{{ item.student.course|default:"-" }}</td>
+                                <td>{{ item.student.get_course_display }}</td>
                                 <td>{{ item.student.get_company_display }}</td>
-                                <td>{{ item.student.year_level|default:"-" }}</td>
-                                
+                                <td>
+                                    {% if item.student.year_level == 1 %}1st Year
+                                    {% elif item.student.year_level == 2 %}2nd Year
+                                    {% elif item.student.year_level == 3 %}3rd Year
+                                    {% elif item.student.year_level == 4 %}4th Year
+                                    {% else %}{{ item.student.year_level }} Year
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if item.record %}
                                         {{ item.record.date|date:"F d, Y" }}
@@ -137,17 +157,33 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if item.time_in %}
-                                        {{ item.time_in|date:"h:i A" }}
+                                    {% if item.record and item.record.time_in_passed %}
+                                        <span class="badge bg-success" style="font-size: 0.85rem;">
+                                            <i class="fas fa-check-circle"></i> PASSED
+                                        </span>
+                                    {% elif item.record and item.record.time_in %}
+                                        <span class="badge bg-success" style="font-size: 0.85rem;">
+                                            <i class="fas fa-check-circle"></i> PASSED
+                                        </span>
                                     {% else %}
-                                        <span class="text-muted">---</span>
+                                        <span class="badge bg-danger" style="font-size: 0.85rem;">
+                                            <i class="fas fa-times-circle"></i> NOT PASSED
+                                        </span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if item.time_out %}
-                                        {{ item.time_out|date:"h:i A" }}
+                                    {% if item.record and item.record.time_out_passed %}
+                                        <span class="badge bg-success" style="font-size: 0.85rem;">
+                                            <i class="fas fa-check-circle"></i> PASSED
+                                        </span>
+                                    {% elif item.record and item.record.time_out %}
+                                        <span class="badge bg-success" style="font-size: 0.85rem;">
+                                            <i class="fas fa-check-circle"></i> PASSED
+                                        </span>
                                     {% else %}
-                                        <span class="text-muted">---</span>
+                                        <span class="badge bg-danger" style="font-size: 0.85rem;">
+                                            <i class="fas fa-times-circle"></i> NOT PASSED
+                                        </span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -176,7 +212,7 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="9" class="text-center">No students found.</td>
+                                <td colspan="10" class="text-center">No students found.{% if company_filter %} Try changing the company filter.{% endif %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -189,7 +225,7 @@
                     <ul class="pagination justify-content-center">
                         {% if page_obj.has_previous %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&company={{ company_filter }}&status={{ status_filter }}">
                                     Previous
                                 </a>
                             </li>
@@ -197,7 +233,7 @@
                         
                         {% for num in page_obj.paginator.page_range %}
                             <li class="page-item {% if page_obj.number == num %}active{% endif %}">
-                                <a class="page-link" href="?page={{ num }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                <a class="page-link" href="?page={{ num }}&week_start={{ selected_week|date:'Y-m-d' }}&company={{ company_filter }}&status={{ status_filter }}">
                                     {{ num }}
                                 </a>
                             </li>
@@ -205,7 +241,7 @@
                         
                         {% if page_obj.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&company={{ company_filter }}&status={{ status_filter }}">
                                     Next
                                 </a>
                             </li>
@@ -224,16 +260,25 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-3">
-                    <span class="badge bg-success">PRESENT</span> - Both Time In and Time Out completed
+                    <span class="badge bg-success">PRESENT</span> - Both Time In and Time Out PASSED
                 </div>
                 <div class="col-md-3">
-                    <span class="badge bg-danger">ABSENT</span> - No Time In or Time Out recorded
+                    <span class="badge bg-danger">ABSENT</span> - No Time In or Time Out PASSED
                 </div>
                 <div class="col-md-3">
-                    <span class="badge bg-warning">LATE</span> - Only Time Out recorded (missed Time In)
+                    <span class="badge bg-warning">LATE</span> - Only Time Out PASSED
                 </div>
                 <div class="col-md-3">
-                    <span class="badge bg-info">CUTTING</span> - Only Time In recorded (missed Time Out)
+                    <span class="badge bg-info">CUTTING</span> - Only Time In PASSED
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <span class="badge bg-success">PASSED</span> - Student successfully submitted their code
+                </div>
+                <div class="col-md-6">
+                    <span class="badge bg-danger">NOT PASSED</span> - Student has not submitted their code
                 </div>
             </div>
         </div>

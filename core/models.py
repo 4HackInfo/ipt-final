@@ -102,10 +102,18 @@ class AttendanceRecord(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='absent')
     week_start = models.DateField()
     
+    # New fields for pass/fail status
+    time_in_passed = models.BooleanField(default=False)
+    time_out_passed = models.BooleanField(default=False)
+    
     class Meta:
         unique_together = ['user', 'date']
     
     def save(self, *args, **kwargs):
+        # Set pass/fail based on whether time_in and time_out exist
+        self.time_in_passed = self.time_in is not None
+        self.time_out_passed = self.time_out is not None
+        
         # Determine status based on time_in and time_out
         if self.time_in and self.time_out:
             self.status = 'present'
