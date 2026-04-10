@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-users"></i> Coordinator Dashboard - {{ coordinator.first_name }} {{ coordinator.last_name }}</h5>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Statistics -->
+    <div class="col-md-3 mb-4">
+        <div class="card bg-success text-white shadow">
+            <div class="card-body">
+                <h5 class="card-title">Total Present</h5>
+                <h2>{{ present_count }}</h2>
+                <p class="mb-0">students today</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-danger text-white shadow">
+            <div class="card-body">
+                <h5 class="card-title">Total Absent</h5>
+                <h2>{{ absent_count }}</h2>
+                <p class="mb-0">students today</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-warning text-white shadow">
+            <div class="card-body">
+                <h5 class="card-title">Total Late</h5>
+                <h2>{{ late_count }}</h2>
+                <p class="mb-0">students today</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-4">
+        <div class="card bg-info text-white shadow">
+            <div class="card-body">
+                <h5 class="card-title">Total Cutting</h5>
+                <h2>{{ cutting_count }}</h2>
+                <p class="mb-0">students today</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Company Summary -->
+    <div class="col-md-12">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-building"></i> Attendance by Company</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Company</th>
+                                <th>Total Students</th>
+                                <th>Present</th>
+                                <th>Absent</th>
+                                <th>Late</th>
+                                <th>Cutting</th>
+                                <th>Attendance Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for company in company_summary %}
+                            <tr>
+                                <td>{{ company.name }}</td>
+                                <td>{{ company.total }}</td>
+                                <td class="text-success">{{ company.present }}</td>
+                                <td class="text-danger">{{ company.absent }}</td>
+                                <td class="text-warning">{{ company.late }}</td>
+                                <td class="text-info">{{ company.cutting }}</td>
+                                <td>
+                                    <div class="progress">
+                                        <div class="progress-bar bg-success" style="width: {% widthratio company.present company.total 100 %}%">
+                                            {% widthratio company.present company.total 100 %}%
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center">No companies found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

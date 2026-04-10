@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white text-center">
+                <h3><i class="fas fa-sign-in-alt"></i> Time In</h3>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="fas fa-check-circle"></i> Submit Time In
+                    </button>
+                </form>
+                <hr>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Note:</strong> Please enter your Student ID and the unique Time In slip code provided by your instructor.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

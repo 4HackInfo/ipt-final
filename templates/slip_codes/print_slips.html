@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+    <div class="card shadow">
+        <div class="card-header bg-success text-white">
+            <h3><i class="fas fa-print"></i> Print Slip Codes</h3>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> 
+                <strong>{{ codes|length }}</strong> codes have been generated and stored in the database.
+                {% if batch %}
+                    <br>Batch: <strong>{{ batch.batch_number }}</strong>
+                    <br>Type: <strong>{{ batch.code_type|upper }}</strong>
+                    <br>Generated: <strong>{{ batch.generated_at|date:"F d, Y h:i A" }}</strong>
+                {% endif %}
+            </div>
+            
+            <!-- Time In Codes Section -->
+            {% with timein_codes=codes|dictsort:"type" %}
+                {% regroup codes by type as code_groups %}
+                {% for group in code_groups %}
+                    <h3 class="mt-4 mb-3">
+                        {% if group.grouper == 'timein' %}
+                            <span class="badge bg-success">TIME IN CODES</span>
+                        {% else %}
+                            <span class="badge bg-danger">TIME OUT CODES</span>
+                        {% endif %}
+                    </h3>
+                    <div class="row">
+                        {% for code in group.list %}
+                            <div class="col-md-3 mb-3">
+                                <div class="card {% if group.grouper == 'timein' %}border-success{% else %}border-danger{% endif %}">
+                                    <div class="card-body text-center">
+                                        <h2 class="{% if group.grouper == 'timein' %}text-success{% else %}text-danger{% endif %}">
+                                            {{ code.code }}
+                                        </h2>
+                                        <p class="text-muted mb-0">One-time use only</p>
+                                        <small>Valid until end of week</small>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            {% endwith %}
+            
+            <div class="text-center mt-4">
+                <div class="btn-group" role="group">
+                    <button onclick="window.print()" class="btn btn-primary">
+                        <i class="fas fa-print"></i> Print
+                    </button>
+                    <a href="{% url 'download_slips_pdf' %}" class="btn btn-success">
+                        <i class="fas fa-file-pdf"></i> Download PDF
+                    </a>
+                    <a href="{% url 'generate_again' %}" class="btn btn-warning" onclick="return confirm('Generate another batch of {{ codes|length }} codes?')">
+                        <i class="fas fa-sync-alt"></i> Generate Again
+                    </a>
+                    <a href="{% url 'generate_slips' %}" class="btn btn-secondary">
+                        <i class="fas fa-plus"></i> New Generation
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Information about Generate Again button -->
+            <div class="alert alert-secondary mt-4">
+                <i class="fas fa-info-circle"></i>
+                <strong>Note:</strong> 
+                <ul class="mb-0 mt-2">
+                    <li><strong>Generate Again:</strong> Creates a new batch with the same number of codes and same type as this batch</li>
+                    <li><strong>New Generation:</strong> Takes you back to the generation form to customize new codes</li>
+                    <li>All generated codes are automatically saved to the database</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @media print {
+        .btn, .navbar, .card-header .btn, .btn-group, .alert-secondary {
+            display: none !important;
+        }
+        .card {
+            border: none !important;
+            box-shadow: none !important;
+        }
+        .col-md-3 {
+            break-inside: avoid;
+        }
+        body {
+            padding: 0;
+            margin: 0;
+        }
+    }
+</style>
+{% endblock %}

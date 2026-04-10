@@ -1,0 +1,205 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-4">All Generated Codes</h1>
+    
+    <!-- Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <h5>Total</h5>
+                    <h3>{{ total_codes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h5>Available</h5>
+                    <h3>{{ unused_codes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <h5>Used</h5>
+                    <h3>{{ used_codes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <h5>Time-In Codes</h5>
+                    <h3>{{ timein_codes }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <h5>Time-Out Codes</h5>
+                    <h3>{{ timeout_codes }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Filter Codes</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Code Type</label>
+                    <select id="typeFilter" class="form-control">
+                        <option value="">All Types</option>
+                        <option value="timein" {% if current_type == 'timein' %}selected{% endif %}>Time In</option>
+                        <option value="timeout" {% if current_type == 'timeout' %}selected{% endif %}>Time Out</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Status</label>
+                    <select id="statusFilter" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="unused" {% if current_status == 'unused' %}selected{% endif %}>Available</option>
+                        <option value="used" {% if current_status == 'used' %}selected{% endif %}>Used</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary w-100" onclick="applyFilters()">
+                        <i class="fas fa-search"></i> Apply Filter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Codes Table -->
+    <div class="card shadow">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Slip Codes List</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Used By</th>
+                            <th>Batch</th>
+                            <th>Created</th>
+                            <th>Used At</th>
+                            <th>Expires</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for code in page_obj %}
+                            <tr>
+                                <td><code class="code-text">{{ code.code }}</code></td>
+                                <td>
+                                    <span class="badge {% if code.code_type == 'timein' %}bg-success{% else %}bg-danger{% endif %}">
+                                        {{ code.code_type|upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if code.is_used %}
+                                        <span class="badge bg-danger">Used</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Available</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ code.used_by.get_full_name|default:"-" }}<br>
+                                    <small>{{ code.used_by.student_id|default:"" }}</small>
+                                </td>
+                                <td><small>{{ code.batch_number|default:"-" }}</small></td>
+                                <td>{{ code.created_at|date:"Y-m-d H:i" }}</td>
+                                <td>{{ code.used_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                                <td>{{ code.expires_at|date:"Y-m-d H:i" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center">No codes found.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&type={{ current_type }}&status={{ current_status }}">
+                                    Previous
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in page_obj.paginator.page_range %}
+                            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                <a class="page-link" href="?page={{ num }}&type={{ current_type }}&status={{ current_status }}">
+                                    {{ num }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                        
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&type={{ current_type }}&status={{ current_status }}">
+                                    Next
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="mt-4">
+        <form method="post" action="{% url 'delete_expired_codes' %}" class="d-inline" onsubmit="return confirm('Delete all expired codes?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i class="fas fa-trash"></i> Delete Expired Codes
+            </button>
+        </form>
+        <a href="{% url 'generate_slips' %}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Generate New Codes
+        </a>
+    </div>
+</div>
+
+<script>
+    function applyFilters() {
+        const type = document.getElementById('typeFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        let url = '{% url "view_all_codes" %}?';
+        if (type) url += 'type=' + type + '&';
+        if (status) url += 'status=' + status + '&';
+        window.location.href = url;
+    }
+</script>
+
+<style>
+    .code-text {
+        font-family: monospace;
+        font-size: 1.1em;
+        font-weight: bold;
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}

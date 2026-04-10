@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-4">Attendance Reports</h1>
+    
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Filter Reports</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row">
+                <div class="col-md-4">
+                    <label>Week Starting</label>
+                    <select name="week_start" class="form-control">
+                        {% for week in weeks %}
+                            <option value="{{ week.date|date:'Y-m-d' }}" {% if selected_week == week.date %}selected{% endif %}>
+                                {{ week.display }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Status</label>
+                    <select name="status" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="present" {% if status_filter == 'present' %}selected{% endif %}>Present</option>
+                        <option value="absent" {% if status_filter == 'absent' %}selected{% endif %}>Absent</option>
+                        <option value="late" {% if status_filter == 'late' %}selected{% endif %}>Late</option>
+                        <option value="cutting" {% if status_filter == 'cutting' %}selected{% endif %}>Cutting</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Apply Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <h5>Present</h5>
+                    <h2>{{ summary.stats.present }}</h2>
+                    <small>{% widthratio summary.stats.present summary.total_students 100 %}%</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body text-center">
+                    <h5>Absent</h5>
+                    <h2>{{ summary.stats.absent }}</h2>
+                    <small>{% widthratio summary.stats.absent summary.total_students 100 %}%</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <h5>Late</h5>
+                    <h2>{{ summary.stats.late }}</h2>
+                    <small>{% widthratio summary.stats.late summary.total_students 100 %}%</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <h5>Cutting</h5>
+                    <h2>{{ summary.stats.cutting }}</h2>
+                    <small>{% widthratio summary.stats.cutting summary.total_students 100 %}%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Total Students Info -->
+    <div class="alert alert-secondary mb-3">
+        <i class="fas fa-users"></i> <strong>Total Students:</strong> {{ summary.total_students }}
+        <span class="ms-3"><i class="fas fa-check-circle text-success"></i> Present: {{ summary.stats.present }}</span>
+        <span class="ms-3"><i class="fas fa-times-circle text-danger"></i> Absent: {{ summary.stats.absent }}</span>
+        <span class="ms-3"><i class="fas fa-clock text-warning"></i> Late: {{ summary.stats.late }}</span>
+        <span class="ms-3"><i class="fas fa-cut text-info"></i> Cutting: {{ summary.stats.cutting }}</span>
+    </div>
+    
+    <!-- Export Button -->
+    <div class="mb-3">
+        <a href="{% url 'export_attendance_csv' %}?week_start={{ selected_week|date:'Y-m-d' }}" class="btn btn-success">
+            <i class="fas fa-file-csv"></i> Export to CSV
+        </a>
+    </div>
+    
+    <!-- Attendance Table -->
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Attendance Records for Week of {{ selected_week|date:"F d, Y" }}</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Student ID</th>
+                            <th>Name</th>
+                            <th>Course</th>
+                            <th>Company</th>
+                            <th>Year Level</th>
+                            <th>Date</th>
+                            <th>Time In</th>
+                            <th>Time Out</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in page_obj %}
+                            <tr>
+                                <td>{{ forloop.counter0|add:page_obj.start_index }}</td>
+                                <td>{{ item.student.student_id }}</td>
+                                <td>{{ item.student.get_full_name }}</td>
+                                <td>{{ item.student.course|default:"-" }}</td>
+                                <td>{{ item.student.get_company_display }}</td>
+                                <td>{{ item.student.year_level|default:"-" }}</td>
+                                
+                                <td>
+                                    {% if item.record %}
+                                        {{ item.record.date|date:"F d, Y" }}
+                                    {% else %}
+                                        {{ selected_week|date:"F d, Y" }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.time_in %}
+                                        {{ item.time_in|date:"h:i A" }}
+                                    {% else %}
+                                        <span class="text-muted">---</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.time_out %}
+                                        {{ item.time_out|date:"h:i A" }}
+                                    {% else %}
+                                        <span class="text-muted">---</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status == 'present' %}
+                                        <span class="badge bg-success" style="font-size: 0.9rem;">
+                                            <i class="fas fa-check-circle"></i> PRESENT
+                                        </span>
+                                    {% elif item.status == 'absent' %}
+                                        <span class="badge bg-danger" style="font-size: 0.9rem;">
+                                            <i class="fas fa-times-circle"></i> ABSENT
+                                        </span>
+                                    {% elif item.status == 'late' %}
+                                        <span class="badge bg-warning" style="font-size: 0.9rem;">
+                                            <i class="fas fa-clock"></i> LATE
+                                        </span>
+                                    {% elif item.status == 'cutting' %}
+                                        <span class="badge bg-info" style="font-size: 0.9rem;">
+                                            <i class="fas fa-cut"></i> CUTTING
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            {{ item.status|upper }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="9" class="text-center">No students found.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+                <nav>
+                    <ul class="pagination justify-content-center">
+                        {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                    Previous
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in page_obj.paginator.page_range %}
+                            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                <a class="page-link" href="?page={{ num }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                    {{ num }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                        
+                        {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&week_start={{ selected_week|date:'Y-m-d' }}&status={{ status_filter }}">
+                                    Next
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Legend -->
+    <div class="card mt-4">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="mb-0"><i class="fas fa-info-circle"></i> Attendance Legend</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <span class="badge bg-success">PRESENT</span> - Both Time In and Time Out completed
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-danger">ABSENT</span> - No Time In or Time Out recorded
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-warning">LATE</span> - Only Time Out recorded (missed Time In)
+                </div>
+                <div class="col-md-3">
+                    <span class="badge bg-info">CUTTING</span> - Only Time In recorded (missed Time Out)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

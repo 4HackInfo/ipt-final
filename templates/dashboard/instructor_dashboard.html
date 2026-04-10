@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="h3 mb-4 text-gray-800">Instructor Dashboard</h1>
+    
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Filter Students</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Company</label>
+                    <select id="companyFilter" class="form-control">
+                        <option value="">All Companies</option>
+                        <option value="ALPHA">Alpha Company</option>
+                        <option value="BRAVO">Bravo Company</option>
+                        <option value="CHARLIE">Charlie Company</option>
+                        <option value="DELTA">Delta Company</option>
+                        <option value="ECHO">Echo Company</option>
+                        <option value="FOXTROT">Foxtrot Company</option>
+                        <option value="GOLF">Golf Company</option>
+                        <option value="HOTEL">Hotel Company</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Course</label>
+                    <select id="courseFilter" class="form-control">
+                        <option value="">All Courses</option>
+                        <option value="BSIT">BS Information Technology</option>
+                        <option value="BSED">BS Education</option>
+                        <option value="BSHM">BS Hospitality Management</option>
+                        <option value="BSCRIM">BS Criminology</option>
+                        <option value="BSTM">BS Tourism Management</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>Status</label>
+                    <select id="statusFilter" class="form-control">
+                        <option value="">All Status</option>
+                        <option value="present">Present</option>
+                        <option value="absent">Absent</option>
+                        <option value="late">Late</option>
+                        <option value="cutting">Cutting</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="row">
+        <div class="col-md-3 mb-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5>Present</h5>
+                    <h2>{{ attendance_summary.stats.present }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5>Absent</h5>
+                    <h2>{{ attendance_summary.stats.absent }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5>Late</h5>
+                    <h2>{{ attendance_summary.stats.late }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5>Cutting</h5>
+                    <h2>{{ attendance_summary.stats.cutting }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Attendance Table -->
+    <div class="card shadow">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Weekly Attendance Records ({{ week_start|date:"F d, Y" }})</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="attendanceTable">
+                    <thead>
+                        <tr>
+                            <th>Student ID</th>
+                            <th>Name</th>
+                            <th>Course</th>
+                            <th>Company</th>
+                            <th>Year Level</th>
+                            <th>Status</th>
+                            <th>Time In</th>
+                            <th>Time Out</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in attendance_records %}
+                            <tr class="attendance-row" 
+                                data-course="{{ item.student.course }}"
+                                data-company="{{ item.student.company }}"
+                                data-status="{% if item.record %}{{ item.record.status }}{% else %}absent{% endif %}">
+                                <td>{{ item.student.student_id }}</td>
+                                <td>{{ item.student.get_full_name }}</td>
+                                <td>{{ item.student.get_course_display }}</td>
+                                <td>{{ item.student.get_company_display }}</td>
+                                <td>Year {{ item.student.year_level }}</td>
+                                <td>
+                                    {% if item.record %}
+                                        <span class="badge 
+                                            {% if item.record.status == 'present' %}bg-success
+                                            {% elif item.record.status == 'absent' %}bg-danger
+                                            {% elif item.record.status == 'late' %}bg-warning
+                                            {% else %}bg-info{% endif %}">
+                                            {{ item.record.status|upper }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-danger">ABSENT</span>
+                                    {% endif %}
+                                 </td>
+                                <td>{{ item.record.time_in|date:"h:i A"|default:"-" }}</td>
+                                <td>{{ item.record.time_out|date:"h:i A"|default:"-" }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center">No students found.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions -->
+    <div class="mt-4">
+        <a href="{% url 'attendance_report' %}" class="btn btn-primary">
+            <i class="fas fa-chart-bar"></i> View Detailed Report
+        </a>
+    </div>
+</div>
+
+<script>
+    // Filter functionality
+    document.getElementById('companyFilter').addEventListener('change', filterTable);
+    document.getElementById('courseFilter').addEventListener('change', filterTable);
+    document.getElementById('statusFilter').addEventListener('change', filterTable);
+    
+    function filterTable() {
+        const company = document.getElementById('companyFilter').value;
+        const course = document.getElementById('courseFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        
+        const rows = document.querySelectorAll('.attendance-row');
+        
+        rows.forEach(row => {
+            let show = true;
+            
+            if (company && row.dataset.company !== company) {
+                show = false;
+            }
+            
+            if (course && row.dataset.course !== course) {
+                show = false;
+            }
+            
+            if (status && row.dataset.status !== status) {
+                show = false;
+            }
+            
+            row.style.display = show ? '' : 'none';
+        });
+    }
+</script>
+{% endblock %}

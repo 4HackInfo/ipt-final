@@ -1,0 +1,45 @@
+python manage.py shell
+
+from core.models import User
+from django.contrib.auth.hashers import make_password
+
+# Create admin user
+admin = User.objects.create(
+    username='admin',
+    email='admin@cec.edu.ph',
+    first_name='System',
+    last_name='Administrator',
+    role='admin',
+    is_staff=True,
+    is_superuser=True,
+    password=make_password('admin123')
+)
+
+# Create instructor
+instructor = User.objects.create(
+    username='instructor',
+    email='instructor@cec.edu.ph',
+    first_name='John',
+    last_name='Smith',
+    role='instructor',
+    password=make_password('instructor123')
+)
+
+# Create sample student
+student = User.objects.create(
+    username='student001',
+    email='student@cec.edu.ph',
+    first_name='Maria',
+    last_name='Santos',
+    role='student',
+    student_id='2024-0001',
+    course='BSIT',
+    company='ALPHA COMPANY',
+    year_level=1,
+    password=make_password('student123')
+)
+
+print("Sample users created!")
+print("Admin: admin/admin123")
+print("Instructor: instructor/instructor123")
+print("Student: student001/student123")
