@@ -4,27 +4,46 @@ from .models import SystemSettings, AttendanceRecord, SlipCode, User
 from django.db.models import Count, Q
 
 def is_system_active():
-    """Check if system is active (time is before Sunday 12:00 AM)"""
+    """
+    Check if system is active for student submissions.
+    Normal schedule: Saturdays from 6:00 AM to 11:59 PM
+    Admin can override anytime with Start Now button
+    """
     now = timezone.now()
-    # Get the next Sunday at 12:00 AM
-    days_until_sunday = (6 - now.weekday()) % 7
-    if days_until_sunday == 0 and now.hour >= 0:
-        # It's Sunday, check if before 12:00 AM? Actually 12:00 AM is start of Sunday
-        # System resets Sunday 12:00 AM, so it's active until next Sunday 12:00 AM
-        next_sunday = now + timedelta(days=7)
-    else:
-        next_sunday = now + timedelta(days=days_until_sunday)
     
-    next_sunday = next_sunday.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Check for admin override first (highest priority)
+    try:
+        settings = SystemSettings.objects.get(id=1)
+        if settings.is_override_active:
+            # Check if override hasn't expired (max 48 hours)
+            if settings.override_until and now < settings.override_until:
+                return True
+            else:
+                # Override expired, turn it off
+                settings.is_override_active = False
+                settings.override_until = None
+                settings.save()
+    except SystemSettings.DoesNotExist:
+        pass
     
-    # System is active if current time is before next Sunday 12:00 AM
-    return now < next_sunday
+    # Normal schedule: Saturday only, 6:00 AM to 11:59 PM
+    # Saturday is weekday 5 (Monday=0, Sunday=6)
+    if now.weekday() == 5:  # Saturday
+        # Check if time is between 6:00 AM and 11:59 PM
+        if now.hour >= 6:  # 6:00 AM or later
+            return True
+    
+    return False
 
 def get_week_start(date=None):
-    """Get the start of week (Sunday) for a given date"""
+    """Get the start of week (Saturday) for a given date"""
     if date is None:
         date = timezone.now().date()
-    return date - timedelta(days=date.weekday() + 1 if date.weekday() != 6 else 0)
+    
+    # Calculate days to subtract to get to Saturday
+    days_to_subtract = (date.weekday() + 2) % 7
+    return date - timedelta(days=days_to_subtract)
+
 
 def calculate_attendance_summary(week_start=None, company_filter=None):
     """Calculate attendance summary for a given week"""
@@ -65,3 +84,15 @@ def calculate_attendance_summary(week_start=None, company_filter=None):
         'week_start': week_start,
         'week_end': week_end,
     }
+
+def get_next_saturday():
+    """Get the next Saturday date"""
+    today = timezone.now().date()
+    days_until_saturday = (5 - today.weekday()) % 7
+    if days_until_saturday == 0 and timezone.now().hour >= 6:
+        days_until_saturday = 7
+    return today + timedelta(days=days_until_saturday)
+
+def can_override_system():
+    """Admin can always override the system (Start Now button always available)"""
+    return True  # Admin can start anytime

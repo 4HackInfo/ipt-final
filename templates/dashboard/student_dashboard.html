@@ -4,17 +4,18 @@
 <div class="container">
     <h1 class="h3 mb-4">Student Dashboard</h1>
     
-    <div class="alert alert-info">
+    <!-- Schedule Information Alert -->
+    <div class="alert alert-warning">
         <i class="fas fa-info-circle"></i>
-        <strong>Welcome to NSTP Attendance System!</strong> Use your slip codes to log your attendance from home.
+        <strong>Attendance Schedule:</strong> You can submit your Time In and Time Out codes every 
+        <strong>SATURDAY from 6:00 AM to 11:59 PM</strong>.
+        {% if system_settings.is_override_active %}
+            <br><span class="text-success"><i class="fas fa-bell"></i> <strong>SYSTEM IS ACTIVE!</strong> You can submit your attendance now.</span>
+        {% elif not system_active %}
+            <br>The system is currently closed. Please wait until the next Saturday at 6:00 AM.
+            <br><small>Next available: {{ next_saturday|date:"F d, Y" }} at 6:00 AM</small>
+        {% endif %}
     </div>
-    
-    {% if not system_active %}
-        <div class="alert alert-warning">
-            <i class="fas fa-clock"></i> The attendance system is currently closed. 
-            New codes will be available next Sunday at 12:00 AM.
-        </div>
-    {% endif %}
     
     <div class="row">
         <!-- Student Information Card -->
@@ -71,8 +72,9 @@
                 </div>
                 <div class="card-body">
                     {% if system_active %}
+                        <!-- Time In Button - Always show unless already passed -->
                         {% if current_record and current_record.time_in_passed %}
-                            <div class="alert alert-success">
+                            <div class="alert alert-success mb-3">
                                 <i class="fas fa-check-circle"></i> <strong>Time In: PASSED</strong>
                                 <br><small>You have successfully logged your Time In.</small>
                             </div>
@@ -83,21 +85,37 @@
                             <p class="text-muted small text-center">Submit your Time In slip code to mark attendance</p>
                         {% endif %}
                         
-                        {% if current_record and current_record.time_in_passed and not current_record.time_out_passed %}
+                        <!-- Time Out Button - Always show if not passed yet -->
+                        {% if current_record and current_record.time_out_passed %}
+                            <div class="alert alert-info mb-3">
+                                <i class="fas fa-check-double"></i> <strong>Time Out: PASSED</strong>
+                                <br><small>You have successfully logged your Time Out.</small>
+                            </div>
+                        {% else %}
                             <a href="{% url 'time_out' %}" class="btn btn-danger btn-lg w-100 mb-3">
                                 <i class="fas fa-sign-out-alt"></i> Time Out
                             </a>
                             <p class="text-muted small text-center">Submit your Time Out slip code to complete attendance</p>
-                        {% elif current_record and current_record.time_out_passed %}
-                            <div class="alert alert-info">
-                                <i class="fas fa-check-double"></i> <strong>Time Out: PASSED</strong>
-                                <br><small>You have completed your attendance for this week!</small>
+                        {% endif %}
+                        
+                        <!-- Completion Message -->
+                        {% if current_record and current_record.time_in_passed and current_record.time_out_passed %}
+                            <div class="alert alert-success text-center mt-2">
+                                <i class="fas fa-trophy"></i> <strong>Congratulations!</strong> You have completed your attendance for this week!
+                            </div>
+                        {% elif current_record and current_record.time_in_passed and not current_record.time_out_passed %}
+                            <div class="alert alert-warning text-center mt-2">
+                                <i class="fas fa-clock"></i> You have timed in but not yet timed out. Don't forget to submit your Time Out code!
+                            </div>
+                        {% elif current_record and not current_record.time_in_passed and current_record.time_out_passed %}
+                            <div class="alert alert-warning text-center mt-2">
+                                <i class="fas fa-exclamation-triangle"></i> <strong>Note:</strong> You have only timed out. This will be marked as LATE.
                             </div>
                         {% endif %}
                     {% else %}
                         <div class="alert alert-secondary">
                             <i class="fas fa-ban"></i> Attendance system is currently inactive.
-                            <br><small>Please check back next Sunday at 12:00 AM</small>
+                            <br><small>Please check back on Saturday at 6:00 AM</small>
                         </div>
                     {% endif %}
                 </div>

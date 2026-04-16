@@ -136,13 +136,16 @@ class AttendanceRecord(models.Model):
 
 class SystemSettings(models.Model):
     is_active = models.BooleanField(default=True)
+    is_override_active = models.BooleanField(default=False)  # Admin override button
+    override_until = models.DateTimeField(null=True, blank=True)  # Until when override is active
     last_updated = models.DateTimeField(auto_now=True)
     
     class Meta:
         verbose_name_plural = "System Settings"
     
     def __str__(self):
-        return f"System Active: {self.is_active}"
+        return f"System Active: {self.is_active} | Override: {self.is_override_active}"
+    
 
 class GeneratedBatch(models.Model):
     """Track batches of generated codes"""

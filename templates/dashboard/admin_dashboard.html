@@ -13,6 +13,102 @@
             <i class="fas fa-ban"></i> Inactive - System resets every Sunday at 12:00 AM
         {% endif %}
     </div>
+
+<!-- System Control Card -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-warning text-dark">
+        <h5 class="mb-0"><i class="fas fa-power-off"></i> System Control</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="alert {% if system_active %}alert-success{% else %}alert-danger{% endif %}">
+                    <strong>System Status:</strong> 
+                    {% if system_active %}
+                        <i class="fas fa-check-circle"></i> ACTIVE - Students can submit attendance
+                    {% else %}
+                        <i class="fas fa-ban"></i> CLOSED - Students cannot submit attendance
+                    {% endif %}
+                    <br>
+                    <small>Normal Schedule: Saturdays only, 6:00 AM - 11:59 PM</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="alert alert-info">
+                    <strong>Next Normal Schedule:</strong> {{ next_saturday|date:"F d, Y" }} at 6:00 AM
+                    <br>
+                    {% if system_settings.is_override_active %}
+                        <span class="text-success"><i class="fas fa-bell"></i> OVERRIDE ACTIVE until {{ system_settings.override_until|date:"F d, Y h:i A" }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-3">
+            {% if not system_settings.is_override_active %}
+                <!-- Start Now Button with Duration Options -->
+                <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#startSystemModal">
+                    <i class="fas fa-play"></i> START NOW (Override)
+                </button>
+            {% else %}
+                <form method="post" action="{% url 'stop_system_override' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger btn-lg" onclick="return confirm('Stop system override? Students will no longer be able to submit attendance.')">
+                        <i class="fas fa-stop"></i> STOP SYSTEM (End Override)
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+        
+        <div class="text-center mt-2">
+            <small class="text-muted">
+                <i class="fas fa-info-circle"></i> "Start Now" button allows you to manually open the system anytime. 
+                Students can then submit their attendance.
+            </small>
+        </div>
+    </div>
+</div>
+
+<!-- Start System Modal -->
+<div class="modal fade" id="startSystemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-play"></i> Start Attendance System</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'toggle_system_override' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <p>Start the attendance system so students can submit their Time In and Time Out codes.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">How long should the system stay open?</label>
+                        <select name="duration_hours" class="form-control">
+                            <option value="2">2 hours</option>
+                            <option value="4">4 hours</option>
+                            <option value="6">6 hours</option>
+                            <option value="8">8 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24" selected>24 hours</option>
+                            <option value="48">48 hours</option>
+                        </select>
+                        <small class="text-muted">After this time, the system will automatically close.</small>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Note:</strong> Students will be able to submit attendance immediately.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Start System Now</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
     
     <!-- Stats Cards -->
     <div class="row">

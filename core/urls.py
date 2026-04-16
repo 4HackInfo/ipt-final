@@ -35,4 +35,6 @@ urlpatterns = [
     
     # System
     path('toggle-system/', views.toggle_system_view, name='toggle_system'),
+    path('toggle-system-override/', views.toggle_system_override, name='toggle_system_override'),
+    path('stop-system-override/', views.stop_system_override, name='stop_system_override'),
 ]

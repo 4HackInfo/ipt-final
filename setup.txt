@@ -27,7 +27,7 @@ instructor = User.objects.create(
 
 # Create sample student
 student = User.objects.create(
-    username='student001',
+    username='student',
     email='student@cec.edu.ph',
     first_name='Maria',
     last_name='Santos',
@@ -40,6 +40,6 @@ student = User.objects.create(
 )
 
 print("Sample users created!")
-print("Admin: admin/admin123")
+print("Admin: admin/admin123")      
 print("Instructor: instructor/instructor123")
-print("Student: student001/student123")
+print("Student: student/student123")

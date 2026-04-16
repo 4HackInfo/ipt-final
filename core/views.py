@@ -22,6 +22,7 @@ from .forms import (
 )
 from .decorators import role_required, admin_required, instructor_required, student_required
 from .utils import is_system_active, get_week_start, calculate_attendance_summary
+from .utils import is_system_active, get_week_start, calculate_attendance_summary, get_next_saturday, can_override_system
 from django.http import JsonResponse
 
 def register_view(request):
@@ -83,7 +84,7 @@ def admin_dashboard_view(request):
     total_students = User.objects.filter(role='student').count()
     total_instructors = User.objects.filter(role='instructor').count()
     
-    # Get current week attendance summary
+    # Get current week attendance summary (Saturday to Friday)
     current_week_start = get_week_start()
     attendance_summary = calculate_attendance_summary(current_week_start)
     
@@ -98,6 +99,10 @@ def admin_dashboard_view(request):
     system_settings.is_active = system_active
     system_settings.save()
     
+    # Check if override is possible
+    override_possible = can_override_system()
+    next_saturday = get_next_saturday()
+    
     # Get code statistics
     available_timein = SlipCode.objects.filter(
         code_type='timein', 
@@ -111,7 +116,12 @@ def admin_dashboard_view(request):
         expires_at__gt=timezone.now()
     ).count()
     
-    # Get company statistics as a LIST (easier for template)
+    # Get total codes
+    total_codes = SlipCode.objects.count()
+    used_codes = SlipCode.objects.filter(is_used=True).count()
+    unused_codes = SlipCode.objects.filter(is_used=False).count()
+    
+    # Get company statistics as a LIST
     company_stats_list = []
     companies = User.COMPANY_CHOICES
     
@@ -156,9 +166,15 @@ def admin_dashboard_view(request):
         'attendance_summary': attendance_summary,
         'recent_attendance': recent_attendance,
         'system_active': system_active,
+        'system_settings': system_settings,
+        'override_possible': override_possible,
+        'next_saturday': next_saturday,
         'available_timein': available_timein,
         'available_timeout': available_timeout,
-        'company_stats_list': company_stats_list,  # Use this instead
+        'total_codes': total_codes,
+        'used_codes': used_codes,
+        'unused_codes': unused_codes,
+        'company_stats_list': company_stats_list,
     }
     
     return render(request, 'dashboard/admin_dashboard.html', context)
@@ -206,7 +222,7 @@ def attendance_report_view(request):
         from datetime import datetime
         week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
     else:
-        week_start = get_week_start()
+        week_start = get_week_start()  # Now returns Saturday
     
     # Get ALL students (filter by company if selected)
     all_students = User.objects.filter(role='student')
@@ -225,7 +241,6 @@ def attendance_report_view(request):
         record = attendance_records.get(student.id)
         
         if record:
-            # Student has attendance record
             combined_data.append({
                 'student': student,
                 'record': record,
@@ -235,7 +250,6 @@ def attendance_report_view(request):
                 'date': record.date,
             })
         else:
-            # Student has NO attendance record - mark as ABSENT
             combined_data.append({
                 'student': student,
                 'record': None,
@@ -254,17 +268,18 @@ def attendance_report_view(request):
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
     
-    # Get summary (this already includes absent students from utils function)
+    # Get summary
     summary = calculate_attendance_summary(week_start, company_filter)
     
-    # Get available weeks (last 8 weeks)
+    # Get available weeks (last 8 weeks, starting from Saturdays)
     from datetime import timedelta
     weeks = []
     for i in range(8):
         week_date = get_week_start(timezone.now().date() - timedelta(weeks=i))
+        week_end = week_date + timedelta(days=6)  # Friday
         weeks.append({
             'date': week_date,
-            'display': week_date.strftime('%B %d, %Y')
+            'display': f"{week_date.strftime('%B %d, %Y')} - {week_end.strftime('%B %d, %Y')} (Sat - Fri)"
         })
     
     context = {
@@ -277,7 +292,6 @@ def attendance_report_view(request):
     }
     
     return render(request, 'reports/attendance_report.html', context)
-
 
 @login_required
 @student_required
@@ -294,26 +308,16 @@ def student_dashboard_view(request):
         week_start=current_week_start
     ).first()
     
-    # For code availability - check if there are ANY unused codes available
-    # Students don't have assigned codes anymore, they use any available code
-    has_available_timein = SlipCode.objects.filter(
-        code_type='timein',
-        is_used=False,
-        expires_at__gt=timezone.now()
-    ).exists()
-    
-    has_available_timeout = SlipCode.objects.filter(
-        code_type='timeout',
-        is_used=False,
-        expires_at__gt=timezone.now()
-    ).exists()
+    # Get system settings
+    system_settings, created = SystemSettings.objects.get_or_create(id=1)
+    next_saturday = get_next_saturday()
     
     context = {
         'attendance_records': attendance_records,
         'current_record': current_record,
         'system_active': is_system_active(),
-        'has_available_timein': has_available_timein,
-        'has_available_timeout': has_available_timeout,
+        'system_settings': system_settings,
+        'next_saturday': next_saturday,
     }
     
     return render(request, 'dashboard/student_dashboard.html', context)
@@ -322,11 +326,14 @@ def student_dashboard_view(request):
 @student_required
 def time_in_view(request):
     if not is_system_active():
-        messages.error(request, 'The attendance system is currently closed. Please check back next week.')
+        next_saturday = get_next_saturday()
+        messages.error(request, f'The attendance system is currently closed. You can only submit attendance on Saturdays from 6:00 AM to 11:59 PM. Next available: {next_saturday.strftime("%B %d, %Y")} at 6:00 AM.')
         return redirect('student_dashboard')
     
-    # Check if student already timed in this week
+    # Get current week
     current_week_start = get_week_start()
+    
+    # Check if student already timed in this week
     existing_record = AttendanceRecord.objects.filter(
         user=request.user,
         week_start=current_week_start
@@ -335,6 +342,8 @@ def time_in_view(request):
     if existing_record and existing_record.time_in:
         messages.warning(request, 'You have already timed in for this week.')
         return redirect('student_dashboard')
+    
+    # Remove the requirement to check for timeout - students can timein anytime
     
     if request.method == 'POST':
         form = TimeInForm(request.POST)
@@ -349,7 +358,6 @@ def time_in_view(request):
             
             # Verify slip code exists in database and is unused
             try:
-                # Look for the code in database - removed the 'user' filter since codes aren't assigned to specific students
                 code = SlipCode.objects.get(
                     code=slip_code,
                     code_type='timein',
@@ -399,23 +407,25 @@ def time_in_view(request):
 @student_required
 def time_out_view(request):
     if not is_system_active():
-        messages.error(request, 'The attendance system is currently closed. Please check back next week.')
+        next_saturday = get_next_saturday()
+        messages.error(request, f'The attendance system is currently closed. You can only submit attendance on Saturdays from 6:00 AM to 11:59 PM. Next available: {next_saturday.strftime("%B %d, %Y")} at 6:00 AM.')
         return redirect('student_dashboard')
     
-    # Check if student has timed in
+    # Get current week
     current_week_start = get_week_start()
+    
+    # Check if student already timed out this week
     existing_record = AttendanceRecord.objects.filter(
         user=request.user,
         week_start=current_week_start
     ).first()
     
-    if not existing_record or not existing_record.time_in:
-        messages.warning(request, 'You must time in first before timing out.')
-        return redirect('student_dashboard')
-    
-    if existing_record.time_out:
+    if existing_record and existing_record.time_out:
         messages.warning(request, 'You have already timed out for this week.')
         return redirect('student_dashboard')
+    
+    # Remove the requirement to time in first - allow timeout only submissions (for late students)
+    # Students can submit timeout even without timein (will be marked as LATE)
     
     if request.method == 'POST':
         form = TimeOutForm(request.POST)
@@ -430,7 +440,6 @@ def time_out_view(request):
             
             # Verify slip code exists in database and is unused
             try:
-                # Look for the code in database - removed the 'user' filter since codes aren't assigned to specific students
                 code = SlipCode.objects.get(
                     code=slip_code,
                     code_type='timeout',
@@ -444,10 +453,19 @@ def time_out_view(request):
                 code.used_at = timezone.now()
                 code.save()
                 
-                # Update attendance record
-                existing_record.time_out = timezone.now()
-                existing_record.time_out_code = code
-                existing_record.save()
+                # Create or update attendance record
+                record, created = AttendanceRecord.objects.get_or_create(
+                    user=request.user,
+                    week_start=current_week_start,
+                    defaults={'time_out': timezone.now(), 'time_out_code': code}
+                )
+                
+                if not created:
+                    # Update existing record
+                    if not record.time_out:
+                        record.time_out = timezone.now()
+                        record.time_out_code = code
+                        record.save()
                 
                 messages.success(request, f'Time out successful at {timezone.now().strftime("%I:%M %p")}!')
                 return redirect('student_dashboard')
@@ -1167,3 +1185,40 @@ def export_attendance_csv(request):
         ])
     
     return response
+
+
+@login_required
+@admin_required
+def toggle_system_override(request):
+    """Admin can manually start the system (override) anytime"""
+    if request.method == 'POST':
+        from datetime import timedelta
+        
+        settings, created = SystemSettings.objects.get_or_create(id=1)
+        
+        # Get duration from request (default 24 hours)
+        duration_hours = int(request.POST.get('duration_hours', 24))
+        
+        # Set override
+        settings.is_override_active = True
+        settings.override_until = timezone.now() + timedelta(hours=duration_hours)
+        settings.save()
+        
+        messages.success(request, f'System started! Students can submit attendance for the next {duration_hours} hours.')
+        return redirect('admin_dashboard')
+    
+    return redirect('admin_dashboard')
+
+@login_required
+@admin_required
+def stop_system_override(request):
+    """Admin can manually stop the system override"""
+    if request.method == 'POST':
+        settings, created = SystemSettings.objects.get_or_create(id=1)
+        settings.is_override_active = False
+        settings.override_until = None
+        settings.save()
+        messages.success(request, 'System stopped. System will follow normal schedule (Saturdays 6:00 AM - 11:59 PM).')
+        return redirect('admin_dashboard')
+    
+    return redirect('admin_dashboard')
