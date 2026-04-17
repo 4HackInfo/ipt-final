@@ -23,6 +23,15 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 
+CSRF_TRUSTED_ORIGINS = [
+    "nstp-attendance.up.railway.app",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "nstp-attendance.up.railway.app",
+    "nstp-attendance.up.railway.app",
+]
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
